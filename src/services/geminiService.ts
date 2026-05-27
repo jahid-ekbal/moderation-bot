@@ -9,8 +9,8 @@ export const checkToxicity = async (text: string): Promise<boolean> => {
   if (!text.trim()) return false;
 
   try {
-    // ফ্রি টায়ারের জন্য সবচেয়ে সেরা এবং ফাস্ট মডেল
-    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    // এখানে সচল এবং সঠিক মডেল "gemini-2.0-flash" সেট করা হয়েছে
+    const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `Analyze the following text for severe profanity, toxicity, highly offensive behavior, cyberbullying, or explicit slurs in English, Bengali, or Banglish language. 
     Respond with exactly one word: "true" if it contains bad words/toxicity, and "false" if it is clean.
@@ -25,7 +25,7 @@ export const checkToxicity = async (text: string): Promise<boolean> => {
 
     return resultText ? resultText.includes("true") : false;
   } catch (error: any) {
-    // ৪২৯ এরর আসলে কনসোলে ক্র্যাশ না করে হ্যান্ডেল করবে
+    // কোটা লিমিট বা ৪২৯ এরর আসলে বট ক্র্যাশ না করে সেফলি স্কিপ করবে
     if (error?.status === 429) {
       console.warn(
         "⚠️ Gemini API Rate limit reached. Skipping AI check for this message.",
