@@ -118,26 +118,27 @@ client.once("ready", async () => {
   }
 });
 
-// --- ২. অল-টাইম মেসেজ ডিলিট করার কোর ফাংশন ---
+// --- ২. অল-টাইম মেসেজ ডিলিট করার ফিক্সড কোর ফাংশন (Nuke All Chats) ---
 async function nukeAllUserMessages(
   guild: any,
   targetUserId: string,
-  outputChannel: any,
+  outputChannel: TextChannel,
 ) {
-  if (!outputChannel || !outputChannel.isTextBased()) return;
+  try {
+    await outputChannel.send(
+      `🧹 <@${targetUserId}> এর অল-টাইম মেসেজ খোঁজা এবং সমস্ত চ্যাট থেকে ডিলিট করার প্রক্রিয়া শুরু হচ্ছে...`,
+    );
 
-  await outputChannel.send(
-    `🧹 <@${targetUserId}> এর অল-টাইম মেসেজ খোঁজা এবং ডিলিট করার প্রক্রিয়া শুরু হচ্ছে...`,
-  );
+    // ফিক্স: কেবল ক্যাশ নয়, সার্ভারের সব চ্যানেল এপিআই থেকে সরাসরি ফেচ করা হলো
+    const channels = await guild.channels.fetch();
+    const textChannels = channels.filter(
+      (c: any) => c && c.type === ChannelType.GuildText,
+    );
 
-  const channels = guild.channels.cache.filter(
-    (c: any) => c.type === ChannelType.GuildText,
-  );
-  let totalDeleted = 0;
+    let totalDeleted = 0;
 
-  for (const [_, channel] of channels) {
-    const textChannel = channel as TextChannel;
-    try {
+    for (const [_, channel] of textChannels) {
+      const textChannel = channel as TextChannel;
       let lastMessageId: string | undefined = undefined;
       let fetching = true;
 
@@ -145,8 +146,9 @@ async function nukeAllUserMessages(
         const options: { limit: number; before?: string } = { limit: 100 };
         if (lastMessageId) options.before = lastMessageId;
 
-        const messages: Collection<string, Message> =
-          await textChannel.messages.fetch(options);
+        const messages: Collection<string, Message> = await textChannel.messages
+          .fetch(options)
+          .catch(() => new Collection());
         if (messages.size === 0) {
           fetching = false;
           break;
@@ -159,26 +161,23 @@ async function nukeAllUserMessages(
         for (const [_, msg] of userMessages) {
           await msg.delete().catch(() => {});
           totalDeleted++;
-          await new Promise((resolve) => setTimeout(resolve, 350)); // ডিসকর্ড রেট লিমিট সেফটি ডিলে
+          await new Promise((resolve) => setTimeout(resolve, 300)); // রেট লিমিট প্রটেকশন ডিলে
         }
 
         lastMessageId = messages.last()?.id;
         if (messages.size < 100) fetching = false;
       }
-    } catch (err) {
-      console.error(
-        `Could not purge messages in channel ${textChannel.name}:`,
-        err,
-      );
     }
+    await outputChannel.send(
+      `✅ সফলভাবে সম্পন্ন হয়েছে! <@${targetUserId}> এর মোট **${totalDeleted}** টি মেসেজ সমস্ত চ্যাট থেকে মুছে ফেলা হয়েছে।`,
+    );
+  } catch (error) {
+    console.error("Nuke Function Error:", error);
   }
-  await outputChannel.send(
-    `✅ সফলভাবে সম্পন্ন হয়েছে! <@${targetUserId}> এর মোট **${totalDeleted}** টি মেসেজ সমস্ত চ্যাট থেকে মুছে ফেলা হয়েছে।`,
-  );
 }
 
 // --- ৩. হেল্প কমান্ড রেসপন্স ম্যানেজার ---
-async function handleHelpCommand(target: any) {
+async function handleHelpCommand(channel: TextChannel) {
   const helpEmbed = new EmbedBuilder()
     .setColor("#0099ff")
     .setTitle("🛡️ REGIX মাল্টি-ফাংশনাল হাইব্রিড গাইড")
@@ -186,21 +185,20 @@ async function handleHelpCommand(target: any) {
       `স্ল্যাশ (\`/\`) অথবা প্রিফিক্স (\`${PREFIX}\`) উভয়ভাবেই কমান্ড রান করা যাবে।\n\n**কমান্ডসমূহ:**\n🔹 \`help\` - বটের গাইডলাইন\n🔹 \`setup\` - লগ ও ওয়েলকাম চ্যানেল সেটআপ\n🔹 \`ticket-setup\` - সাপোর্ট টিকেট প্যানেল\n🔹 \`nukeuser <@user>\` - ইউজারের অল-টাইম সব মেসেজ ডিলিট`,
     );
 
-  if (typeof target.reply === "function") {
-    await target.reply({ embeds: [helpEmbed] });
-  } else if (typeof target.send === "function") {
-    await target.send({ embeds: [helpEmbed] });
-  }
+  await channel.send({ embeds: [helpEmbed] });
 }
 
 // --- ৪. স্ল্যাশ কমান্ড ও বাটন ইন্টারঅ্যাকশন হ্যান্ডলার ---
 client.on("interactionCreate", async (interaction: Interaction) => {
   if (interaction.isChatInputCommand()) {
-    const { commandName, guildId, guild } = interaction;
-    if (!guildId || !guild) return;
+    const { commandName, guildId, guild, channel } = interaction;
+    if (!guildId || !guild || !channel || !channel.isTextBased()) return;
+    const txtChannel = channel as TextChannel;
 
     if (commandName === "help") {
-      await handleHelpCommand(interaction);
+      await interaction.deferReply({ ephemeral: true });
+      await handleHelpCommand(txtChannel);
+      await interaction.editReply("✅ হেল্প মেনু পাঠানো হয়েছে।");
     }
 
     if (commandName === "setup") {
@@ -214,11 +212,13 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     }
 
     if (commandName === "ticket-setup") {
-      const channel = interaction.options.getChannel("channel") as TextChannel;
+      const targetChannel = interaction.options.getChannel(
+        "channel",
+      ) as TextChannel;
       const category = interaction.options.getChannel("category");
       if (!category)
         return interaction.reply({
-          content: "❌ বৈধ ক্যাটাগরি সিলেক্ট করুন",
+          content: "❌ একটি বৈধ ক্যাটাগরি সিলেক্ট করুন",
           ephemeral: true,
         });
 
@@ -230,7 +230,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
         .setColor("#5865F2")
         .setTitle("📩 সাপোর্ট টিকেট প্যানেল")
         .setDescription(
-          "হেল্প বা কমপ্লেইনের জন্য নিচের বাটনে ক্লিক করে টিকেট ওপেন করুন।",
+          "আপনার যদি কোনো সাহায্য বা অভিযোগ থাকে, তবে নিচের বাটনে ক্লিক করে একটি সাপোর্ট টিকেট ওপেন করুন। আমাদের টিম দ্রুত যোগাযোগ করবে।",
         );
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -240,9 +240,10 @@ client.on("interactionCreate", async (interaction: Interaction) => {
           .setStyle(ButtonStyle.Primary)
           .setEmoji("✉️"),
       );
-      await channel.send({ embeds: [embed], components: [row] });
+
+      await targetChannel.send({ embeds: [embed], components: [row] });
       await interaction.reply({
-        content: "✅ টিকেট প্যানেল তৈরি হয়েছে!",
+        content: "✅ টিকেট প্যানেল সফলভাবে তৈরি হয়েছে!",
         ephemeral: true,
       });
     }
@@ -255,16 +256,19 @@ client.on("interactionCreate", async (interaction: Interaction) => {
           "⏳ অল-টাইম মেসেজ ডিলিট করার অ্যাকশন ব্যাকগ্রাউন্ডে প্রসেস করা হচ্ছে...",
         ephemeral: true,
       });
-      await nukeAllUserMessages(guild, targetUser.id, interaction.channel);
+      await nukeAllUserMessages(guild, targetUser.id, txtChannel);
     }
   }
 
+  // 📩 টিকেট বাটন ইন্টারঅ্যাকশন ফিক্স
   if (interaction.isButton() && interaction.customId === "create_ticket") {
     const { guild, user } = interaction;
     if (!guild) return;
     await interaction.deferReply({ ephemeral: true });
+
     const parentId = config[guild.id]?.ticketCategory;
 
+    // ফিক্স: চ্যানেল তৈরি এবং রিড হিস্ট্রি পারমিশন অ্যাড করা হলো
     const ticketChannel = await guild.channels.create({
       name: `ticket-${user.username}`,
       type: ChannelType.GuildText,
@@ -279,28 +283,38 @@ client.on("interactionCreate", async (interaction: Interaction) => {
           allow: [
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory, // নতুন অ্যাড করা হলো
+            PermissionFlagsBits.EmbedLinks,
           ],
         },
       ],
     });
+
+    const ticketEmbed = new EmbedBuilder()
+      .setColor("#00ffcc")
+      .setTitle("🎟️ সাপোর্ট টিকেট ওপেন হয়েছে")
+      .setDescription(
+        `হ্যালো <@${user.id}>, আমাদের সাপোর্ট টিমে আপনাকে স্বাগতম। আপনার সমস্যাটি এখানে বিস্তারিত লিখুন। স্টাফ মেম্বাররা দ্রুতই আপনার সাথে যোগাযোগ করবে।`,
+      )
+      .setTimestamp();
+
     await ticketChannel.send({
-      content: `${user} টিম মেম্বাররা দ্রুতই আপনার সাথে যোগাযোগ করবে।`,
+      content: `${user} | <@&${guild.roles.highest.id}>`,
+      embeds: [ticketEmbed],
     });
     await interaction.editReply({
-      content: `✅ টিকেট তৈরি হয়েছে: ${ticketChannel}`,
+      content: `✅ আপনার টিকেট চ্যানেল তৈরি হয়েছে: ${ticketChannel}`,
     });
   }
 });
 
-// --- ৫. একক এবং নিখুঁত মেসেজ ইভেন্ট (Prefix, AI Filter & Spam Protection) ---
+// --- ৫. মেসেজ ইভেন্ট (Prefix, AI Filter & Spam Protection) ---
 client.on("messageCreate", async (message: Message) => {
-  // নিশ্চিত করা হচ্ছে বট কোনো লুপ তৈরি করছে না এবং এটি একটি সার্ভার মেসেজ
   if (message.author.bot || !message.guild) return;
 
-  // সমাধান: টাইপস্ক্রিপ্টকে নিশ্চিত করার জন্য চ্যানেলটিকে TextChannel হিসেবে কাস্ট করা হলো
   const channel = message.channel as TextChannel;
 
-  // 🛡️ স্প্যাম প্রটেকশন লেয়ার (একসাথে একাধিক ফাইল আপলোড রোধ)
+  // 🛡️ স্প্যাম প্রটেকশন লেয়ার
   if (message.attachments.size >= 4) {
     await message.delete().catch(() => {});
     await channel.send(
@@ -352,7 +366,7 @@ client.on("messageCreate", async (message: Message) => {
 
   if (!isToxic) return;
 
-  // খারাপ কন্টেন্ট ডিটেকশন ও অ্যাকশন
+  // খারাপ কন্টেন্ট ডিটেকশন অ্যাকশন
   await message.delete().catch(() => {});
   const userId = message.author.id;
   warnings[userId] = (warnings[userId] || 0) + 1;
