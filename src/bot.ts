@@ -17,22 +17,11 @@ import {
   TextChannel,
 } from "discord.js";
 import * as dotenv from "dotenv";
+import fs from "fs";
 import { checkToxicity } from "./services/geminiService";
-import { loadJSON, saveJSON } from "./utils/dataHandler";
+import { db } from "./utils/db"; // প্রিজমা ডাটাবেস ক্লায়েন্ট ইমপোর্ট
 
 dotenv.config();
-
-interface GuildConfig {
-  logChannel?: string;
-  welcomeChannel?: string;
-  ticketCategory?: string;
-}
-interface Config {
-  [guildId: string]: GuildConfig;
-}
-interface Warnings {
-  [userId: string]: number;
-}
 
 const PREFIX = "!";
 
@@ -45,8 +34,20 @@ const client = new Client({
   ],
 });
 
-let config: Config = loadJSON("./data/config.json", {});
-let warnings: Warnings = loadJSON("./data/warnings.json", {});
+// লোকাল ব্যাড-ওয়ার্ড ফাইল লোড করার সেফ মেথড (ডাটাবেসের চাপ কমাতে)
+const loadBadWords = (): string[] => {
+  try {
+    if (fs.existsSync("./data/badWords.json")) {
+      const data = fs.readFileSync("./data/badWords.json", "utf8").trim();
+      return data ? JSON.parse(data) : ["fuck", "shit"];
+    }
+  } catch (e) {
+    console.error("Error loading badWords JSON:", e);
+  }
+  return ["fuck", "shit"];
+};
+
+const badWords = loadBadWords();
 
 // --- ১. স্ল্যাশ কমান্ড রেজিস্ট্রেশন ---
 const commands = [
@@ -111,14 +112,14 @@ client.once("ready", async () => {
       await rest.put(Routes.applicationCommands(client.user.id), {
         body: commands,
       });
-      console.log(`✅ ${client.user.tag} অনলাইনে রেডি আছে!`);
+      console.log(`✅ ${client.user.tag} প্রিজমা ডাটাবেস মোডে রেডি আছে!`);
     }
   } catch (error) {
     console.error(error);
   }
 });
 
-// --- ২. অল-টাইম মেসেজ ডিলিট করার ফিক্সড কোর ফাংশন (Nuke All Chats) ---
+// --- ২. অল-টাইম মেসেজ ডিলিট করার কোর ফাংশন (Nuke All Chats) ---
 async function nukeAllUserMessages(
   guild: any,
   targetUserId: string,
@@ -129,7 +130,6 @@ async function nukeAllUserMessages(
       `🧹 <@${targetUserId}> এর অল-টাইম মেসেজ খোঁজা এবং সমস্ত চ্যাট থেকে ডিলিট করার প্রক্রিয়া শুরু হচ্ছে...`,
     );
 
-    // ফিক্স: কেবল ক্যাশ নয়, সার্ভারের সব চ্যানেল এপিআই থেকে সরাসরি ফেচ করা হলো
     const channels = await guild.channels.fetch();
     const textChannels = channels.filter(
       (c: any) => c && c.type === ChannelType.GuildText,
@@ -161,7 +161,7 @@ async function nukeAllUserMessages(
         for (const [_, msg] of userMessages) {
           await msg.delete().catch(() => {});
           totalDeleted++;
-          await new Promise((resolve) => setTimeout(resolve, 300)); // রেট লিমিট প্রটেকশন ডিলে
+          await new Promise((resolve) => setTimeout(resolve, 300));
         }
 
         lastMessageId = messages.last()?.id;
@@ -180,7 +180,7 @@ async function nukeAllUserMessages(
 async function handleHelpCommand(channel: TextChannel) {
   const helpEmbed = new EmbedBuilder()
     .setColor("#0099ff")
-    .setTitle("🛡️ REGIX মাল্টি-ফাংশনাল হাইব্রিড গাইড")
+    .setTitle("🛡️ REGIX মাল্টি-ফাংশনাল ডাটাবেস হাইব্রিড গাইড")
     .setDescription(
       `স্ল্যাশ (\`/\`) অথবা প্রিফিক্স (\`${PREFIX}\`) উভয়ভাবেই কমান্ড রান করা যাবে।\n\n**কমান্ডসমূহ:**\n🔹 \`help\` - বটের গাইডলাইন\n🔹 \`setup\` - লগ ও ওয়েলকাম চ্যানেল সেটআপ\n🔹 \`ticket-setup\` - সাপোর্ট টিকেট প্যানেল\n🔹 \`nukeuser <@user>\` - ইউজারের অল-টাইম সব মেসেজ ডিলিট`,
     );
@@ -204,11 +204,24 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     if (commandName === "setup") {
       const logChan = interaction.options.getChannel("log");
       const welChan = interaction.options.getChannel("welcome");
-      if (!config[guildId]) config[guildId] = {};
-      if (logChan) config[guildId].logChannel = logChan.id;
-      if (welChan) config[guildId].welcomeChannel = welChan.id;
-      saveJSON("./data/config.json", config);
-      await interaction.reply("✅ কনফিগারেশন সফলভাবে আপডেট করা হয়েছে!");
+
+      // ডাটাবেস অ্যাকশন: Upsert কনফিগারেশন
+      await db.guildConfig.upsert({
+        where: { guildId },
+        update: {
+          ...(logChan && { logChannel: logChan.id }),
+          ...(welChan && { welcomeChannel: welChan.id }),
+        },
+        create: {
+          guildId,
+          logChannel: logChan?.id || null,
+          welcomeChannel: welChan?.id || null,
+        },
+      });
+
+      await interaction.reply(
+        "✅ ডাটাবেসে কনফিগারেশন সফলভাবে আপডেট করা হয়েছে!",
+      );
     }
 
     if (commandName === "ticket-setup") {
@@ -222,9 +235,12 @@ client.on("interactionCreate", async (interaction: Interaction) => {
           ephemeral: true,
         });
 
-      if (!config[guildId]) config[guildId] = {};
-      config[guildId].ticketCategory = category.id;
-      saveJSON("./data/config.json", config);
+      // ডাটাবেস অ্যাকশন: টিকেট ক্যাটাগরি সংরক্ষণ
+      await db.guildConfig.upsert({
+        where: { guildId },
+        update: { ticketCategory: category.id },
+        create: { guildId, ticketCategory: category.id },
+      });
 
       const embed = new EmbedBuilder()
         .setColor("#5865F2")
@@ -243,7 +259,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
 
       await targetChannel.send({ embeds: [embed], components: [row] });
       await interaction.reply({
-        content: "✅ টিকেট প্যানেল সফলভাবে তৈরি হয়েছে!",
+        content: "✅ টিকেট প্যানেল ডাটাবেস ট্র্যাকিং সহ তৈরি হয়েছে!",
         ephemeral: true,
       });
     }
@@ -260,15 +276,18 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     }
   }
 
-  // 📩 টিকেট বাটন ইন্টারঅ্যাকশন ফিক্স
+  // 📩 টিকেট বাটন ইন্টারঅ্যাকশন
   if (interaction.isButton() && interaction.customId === "create_ticket") {
     const { guild, user } = interaction;
     if (!guild) return;
     await interaction.deferReply({ ephemeral: true });
 
-    const parentId = config[guild.id]?.ticketCategory;
+    // ডাটাবেস থেকে ক্যাটাগরি আইডি রিড করা
+    const guildConfig = await db.guildConfig.findUnique({
+      where: { guildId: guild.id },
+    });
+    const parentId = guildConfig?.ticketCategory;
 
-    // ফিক্স: চ্যানেল তৈরি এবং রিড হিস্ট্রি পারমিশন অ্যাড করা হলো
     const ticketChannel = await guild.channels.create({
       name: `ticket-${user.username}`,
       type: ChannelType.GuildText,
@@ -283,7 +302,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
           allow: [
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory, // নতুন অ্যাড করা হলো
+            PermissionFlagsBits.ReadMessageHistory,
             PermissionFlagsBits.EmbedLinks,
           ],
         },
@@ -294,7 +313,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
       .setColor("#00ffcc")
       .setTitle("🎟️ সাপোর্ট টিকেট ওপেন হয়েছে")
       .setDescription(
-        `হ্যালো <@${user.id}>, আমাদের সাপোর্ট টিমে আপনাকে স্বাগতম। আপনার সমস্যাটি এখানে বিস্তারিত লিখুন। স্টাফ মেম্বাররা দ্রুতই আপনার সাথে যোগাযোগ করবে।`,
+        `হ্যালো <@${user.id}>, আমাদের সাপোর্ট টিমে আপনাকে স্বাগতম। আপনার সমস্যাটি এখানে বিস্তারিত লিখুন।`,
       )
       .setTimestamp();
 
@@ -308,11 +327,12 @@ client.on("interactionCreate", async (interaction: Interaction) => {
   }
 });
 
-// --- ৫. মেসেজ ইভেন্ট (Prefix, AI Filter & Spam Protection) ---
+// --- ৫. মেসেজ ইভেন্ট (Prefix, AI Filter, DB Warning System & Spam Protection) ---
 client.on("messageCreate", async (message: Message) => {
   if (message.author.bot || !message.guild) return;
 
   const channel = message.channel as TextChannel;
+  const guildId = message.guild.id;
 
   // 🛡️ স্প্যাম প্রটেকশন লেয়ার
   if (message.attachments.size >= 4) {
@@ -357,7 +377,6 @@ client.on("messageCreate", async (message: Message) => {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, "")
     .trim();
-  const badWords: string[] = loadJSON("./data/badWords.json", ["fuck", "shit"]);
   let isToxic = badWords.some((word) => cleanText.includes(word));
 
   if (!isToxic) {
@@ -369,20 +388,28 @@ client.on("messageCreate", async (message: Message) => {
   // খারাপ কন্টেন্ট ডিটেকশন অ্যাকশন
   await message.delete().catch(() => {});
   const userId = message.author.id;
-  warnings[userId] = (warnings[userId] || 0) + 1;
-  saveJSON("./data/warnings.json", warnings);
-  const currentWarnings = warnings[userId];
 
-  const logChannelId = config[message.guild.id]?.logChannel;
-  if (logChannelId) {
+  // ডাটাবেস অ্যাকশন: ইউজারের ওয়ার্নিং সংখ্যা ১ বৃদ্ধি বা নতুন এন্ট্রি তৈরি করা
+  const userWarning = await db.userWarning.upsert({
+    where: { userId_guildId: { userId, guildId } },
+    update: { count: { increment: 1 } },
+    create: { userId, guildId, count: 1 },
+  });
+
+  const currentWarnings = userWarning.count;
+
+  // ডাটাবেস থেকে মডারেশন লগ চ্যানেল খুঁজে বের করা
+  const guildConfig = await db.guildConfig.findUnique({ where: { guildId } });
+
+  if (guildConfig?.logChannel) {
     const logChannel = message.guild.channels.cache.get(
-      logChannelId,
+      guildConfig.logChannel,
     ) as TextChannel;
     logChannel?.send({
       embeds: [
         new EmbedBuilder()
           .setColor("#ff0000")
-          .setTitle("🚫 অশালীন ভাষা শনাক্ত!")
+          .setTitle("🚫 অশালীন ভাষা শনাক্ত (ডাটাবেস ট্রাঞ্জেকশন)")
           .addFields(
             { name: "ইউজার", value: `<@${userId}>`, inline: true },
             {
@@ -413,21 +440,28 @@ client.on("messageCreate", async (message: Message) => {
       await message.author.send(
         "🚫 **REGIX মডারেশন:** নিয়ম ভঙ্গ করে ৫ বার গালি দেওয়ার কারণে আপনাকে সার্ভার থেকে স্থায়ীভাবে **Ban** করা হয়েছে।",
       );
-      delete warnings[userId];
-      saveJSON("./data/warnings.json", warnings);
+
+      // ডাটাবেস অ্যাকশন: ব্যান হওয়ার পর এই সার্ভার থেকে ইউজারের ওয়ার্নিং ডাটা রিসেট
+      await db.userWarning
+        .delete({ where: { userId_guildId: { userId, guildId } } })
+        .catch(() => {});
     } else {
       await message.author.send(
         `⚠️ **REGIX মডারেশন:** সার্ভারে অশালীন ভাষা ব্যবহার করা নিষেধ। আপনার সতর্কতা কাউন্ট: **${currentWarnings}/5**।`,
       );
     }
   } catch (err) {
-    console.error("Error executing rule moderation action:", err);
+    console.error("Error executing moderation action:", err);
   }
 });
 
 // --- ৬. মেম্বার জয়েনিং ইভেন্ট ---
 client.on("guildMemberAdd", async (member: GuildMember) => {
-  const welcomeChannelId = config[member.guild.id]?.welcomeChannel;
+  // ডাটাবেস থেকে স্বাগতম চ্যানেল আইডি রিড করা
+  const guildConfig = await db.guildConfig.findUnique({
+    where: { guildId: member.guild.id },
+  });
+  const welcomeChannelId = guildConfig?.welcomeChannel;
   if (!welcomeChannelId) return;
 
   const channel = member.guild.channels.cache.get(
