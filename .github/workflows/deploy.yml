@@ -3,7 +3,7 @@ name: Deploy REGIX Bot to Ubuntu Server
 on:
   push:
     branches:
-      - main # কোড 'main' ব্রাঞ্চে পুশ হলেই পাইপলাইন চালু হবে
+      - main
 
 jobs:
   deploy:
@@ -20,22 +20,26 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            # সার্ভারে আপনার প্রজেক্টের সঠিক ফোল্ডারে প্রবেশ করুন
-            cd ~/moderation-bot || exit
+            # ১. সার্ভারে ফোল্ডারটি সঠিক নামে আছে কিনা তা ভ্যালিডেশন করা
+            if [ ! -d "$HOME/moderation-bot" ]; then
+              echo "❌ Error: Directory $HOME/moderation-bot not found on server!"
+              exit 1
+            fi
 
-            # গিটহাব থেকে লেটেস্ট কোড সার্ভারে পুল করা
-            git pull origin main
+            cd "$HOME/moderation-bot" || exit 1
 
-            # উবুন্টুর নন-ইন্টারঅ্যাক্টিভ শেলের জন্য Bun ও PM2 পাথ লোড করা
+            # ২. গিট মার্জ কনফ্লিক্ট এড়াতে হার্ড রিসেট দিয়ে লেটেস্ট কোড নেওয়া
+            git fetch origin main
+            git reset --hard origin/main
+
+            # ৩. এনভায়রনমেন্ট পাথ স্পষ্টভাবে লোড করা
             export BUN_INSTALL="$HOME/.bun"
-            export PATH="$BUN_INSTALL/bin:$HOME/.local/share/npm/bin:$PATH"
+            export PATH="$BUN_INSTALL/bin:$PATH"
 
-            # নতুন কোনো প্যাকেজ থাকলে ইনস্টল করা
+            # ৪. প্যাকেজ ইনস্টল ও প্রিজমা ডাটাবেস আপডেট
             bun install
-
-            # প্রিজমা ডাটাবেস সিঙ্ক এবং ক্লায়েন্ট টাইপস জেনারেট করা
             bunx prisma db push
             bunx prisma generate
 
-            # ডাউনটাইম ছাড়া PM2 দিয়ে বটটি রিস্টার্ট করা (রানিং না থাকলে নতুন স্টার্ট নেবে)
+            # ۵. PM2 দিয়ে ডাউনটাইম ছাড়া রিস্টার্ট করা
             pm2 restart regix-bot --update-env || pm2 start bun --name "regix-bot" -- src/bot.ts
