@@ -1,4 +1,4 @@
-name: Deploy REGIX Bot to Ubuntu Server
+name: Deploy REGIX Bot to Local Ubuntu Server
 
 on:
   push:
@@ -7,39 +7,20 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Executing Remote SSH Commands
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            # ১. সার্ভারে ফোল্ডারটি সঠিক নামে আছে কিনা তা ভ্যালিডেশন করা
-            if [ ! -d "$HOME/moderation-bot" ]; then
-              echo "❌ Error: Directory $HOME/moderation-bot not found on server!"
-              exit 1
-            fi
+      - name: Build and Restart Bot Locally
+        run: |
+          source $HOME/.bashrc
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
 
-            cd "$HOME/moderation-bot" || exit 1
+          bun install
+          bunx prisma db push
+          bunx prisma generate
 
-            # ২. গিট মার্জ কনফ্লিক্ট এড়াতে হার্ড রিসেট দিয়ে লেটেস্ট কোড নেওয়া
-            git fetch origin main
-            git reset --hard origin/main
-
-            # ৩. এনভায়রনমেন্ট পাথ স্পষ্টভাবে লোড করা
-            export BUN_INSTALL="$HOME/.bun"
-            export PATH="$BUN_INSTALL/bin:$PATH"
-
-            # ৪. প্যাকেজ ইনস্টল ও প্রিজমা ডাটাবেস আপডেট
-            bun install
-            bunx prisma db push
-            bunx prisma generate
-
-            # ۵. PM2 দিয়ে ডাউনটাইম ছাড়া রিস্টার্ট করা
-            pm2 restart regix-bot --update-env || pm2 start bun --name "regix-bot" -- src/bot.ts
+          pm2 restart regix-bot --update-env || pm2 start bun --name "regix-bot" -- src/bot.ts
