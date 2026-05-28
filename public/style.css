@@ -1,0 +1,160 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap");
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+}
+
+body {
+  background: #0a0e17;
+  color: #fff;
+  min-height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* নিয়ন গ্লো ইফেক্ট */
+.neon-circle {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(150px);
+  z-index: 0;
+}
+.circle-1 {
+  width: 300px;
+  height: 300px;
+  background: #00f2fe;
+  top: 10%;
+  left: 10%;
+}
+.circle-2 {
+  width: 400px;
+  height: 400px;
+  background: #9b51e0;
+  bottom: 10%;
+  right: 10%;
+}
+
+/* মেইন লেআউট (Frosted Glass Container) */
+.dashboard-container {
+  display: flex;
+  width: 95vw;
+  height: 90vh;
+  margin: 5vh auto;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  z-index: 1;
+  position: relative;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* সাইডবার */
+.sidebar {
+  width: 280px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #00f2fe;
+}
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 40px;
+}
+nav a {
+  color: #aaa;
+  text-decoration: none;
+  padding: 12px;
+  border-radius: 12px;
+  display: flex;
+  gap: 10px;
+  transition: 0.3s;
+}
+nav a:hover,
+nav a.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* বাটন ও ইউজার প্রোফাইল */
+#loginBtn {
+  width: 100%;
+  padding: 12px;
+  background: #5865f2;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.3s;
+}
+#loginBtn:hover {
+  background: #4752c4;
+  box-shadow: 0 0 15px rgba(88, 101, 242, 0.5);
+}
+
+/* কন্টেন্ট এরিয়া */
+.main-content {
+  flex: 1;
+  padding: 40px;
+  overflow-y: auto;
+}
+header h1 {
+  font-size: 2.5rem;
+  font-weight: 600;
+  background: linear-gradient(45deg, #fff, #00f2fe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+header p {
+  color: #aaa;
+  margin-top: 5px;
+}
+
+/* কার্ড ডিজাইন */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 25px;
+  margin-top: 40px;
+}
+.card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 25px;
+  border-radius: 20px;
+  transition: 0.3s;
+}
+.card:hover {
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 242, 254, 0.3);
+}
+.card .icon {
+  font-size: 2rem;
+  color: #00f2fe;
+  margin-bottom: 15px;
+}
+.card h3 {
+  color: #aaa;
+  font-weight: 400;
+  font-size: 0.9rem;
+}
+.card h2 {
+  font-size: 2rem;
+  margin-top: 5px;
+  font-weight: 600;
+}

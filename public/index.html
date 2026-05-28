@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+    <title>REGIX Bot Dashboard</title>
+    <link
+      rel="stylesheet"
+      href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  </head>
+  <body>
+    <div class="neon-circle circle-1"></div>
+    <div class="neon-circle circle-2"></div>
+
+    <div class="dashboard-container">
+      <aside class="sidebar">
+        <div class="brand">
+          <i class="fa-solid fa-bolt"></i>
+          <h2>REGIX STUDIO</h2>
+        </div>
+        <nav>
+          <a
+            href="#"
+            class="active"
+            ><i class="fa-solid fa-chart-pie"></i> Overview</a
+          >
+          <a href="#"><i class="fa-solid fa-sliders"></i> Bot Control</a>
+          <a href="#"><i class="fa-solid fa-shield-halved"></i> Moderation</a>
+        </nav>
+        <div
+          class="user-profile"
+          id="userProfile">
+          <button
+            id="loginBtn"
+            onclick="window.location.href = '/api/auth/login'">
+            <i class="fa-brands fa-discord"></i> Login with Discord
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header>
+          <h1>System Overview</h1>
+          <p id="welcomeMessage">
+            Welcome back! Manage your guild operations with precision.
+          </p>
+        </header>
+
+        <section class="stats-grid">
+          <div class="card">
+            <i class="fa-solid fa-server icon"></i>
+            <h3>Active Guilds</h3>
+            <h2 id="guildCount">--</h2>
+          </div>
+          <div class="card">
+            <i class="fa-solid fa-triangle-exclamation icon"></i>
+            <h3>Total Warnings</h3>
+            <h2 id="warningCount">--</h2>
+          </div>
+          <div class="card">
+            <i class="fa-solid fa-microchip icon"></i>
+            <h3>System Engine</h3>
+            <h2>Bun v1.3</h2>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

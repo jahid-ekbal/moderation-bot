@@ -29,5 +29,7 @@ jobs:
           bunx prisma db push
           bunx prisma generate
 
-          # ৫. PM2 দিয়ে ডাউনটাইম ছাড়া বট রিস্টার্ট করা
+
+          # ৫. PM2 দিয়ে বট এবং ড্যাশবোর্ড সার্ভার দুটিই ডাউনটাইম ছাড়া রিস্টার্ট বা স্টার্ট করা
           pm2 restart regix-bot --update-env || pm2 start bun --name "regix-bot" -- src/bot.ts
+          pm2 restart regix-server --update-env || pm2 start bun --name "regix-server" -- src/server.ts
