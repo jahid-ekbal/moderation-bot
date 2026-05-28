@@ -1,0 +1,41 @@
+name: Deploy REGIX Bot to Ubuntu Server
+
+on:
+  push:
+    branches:
+      - main # কোড 'main' ব্রাঞ্চে পুশ হলেই পাইপলাইন চালু হবে
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Executing Remote SSH Commands
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # সার্ভারে আপনার প্রজেক্টের সঠিক ফোল্ডারে প্রবেশ করুন
+            cd ~/moderation-bot || exit
+
+            # গিটহাব থেকে লেটেস্ট কোড সার্ভারে পুল করা
+            git pull origin main
+
+            # উবুন্টুর নন-ইন্টারঅ্যাক্টিভ শেলের জন্য Bun ও PM2 পাথ লোড করা
+            export BUN_INSTALL="$HOME/.bun"
+            export PATH="$BUN_INSTALL/bin:$HOME/.local/share/npm/bin:$PATH"
+
+            # নতুন কোনো প্যাকেজ থাকলে ইনস্টল করা
+            bun install
+
+            # প্রিজমা ডাটাবেস সিঙ্ক এবং ক্লায়েন্ট টাইপস জেনারেট করা
+            bunx prisma db push
+            bunx prisma generate
+
+            # ডাউনটাইম ছাড়া PM2 দিয়ে বটটি রিস্টার্ট করা (রানিং না থাকলে নতুন স্টার্ট নেবে)
+            pm2 restart regix-bot --update-env || pm2 start bun --name "regix-bot" -- src/bot.ts
