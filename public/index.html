@@ -5,7 +5,7 @@
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0" />
-    <title>REGIX Bot Dashboard</title>
+    <title>REGIX Control Panel</title>
     <link
       rel="stylesheet"
       href="style.css" />
@@ -18,6 +18,7 @@
     <div class="neon-circle circle-2"></div>
 
     <div class="dashboard-container">
+      <!-- সাইডবার মেনু -->
       <aside class="sidebar">
         <div class="brand">
           <i class="fa-solid fa-bolt"></i>
@@ -26,11 +27,28 @@
         <nav>
           <a
             href="#"
-            class="active"
+            class="nav-link active"
+            data-tab="overview"
             ><i class="fa-solid fa-chart-pie"></i> Overview</a
           >
-          <a href="#"><i class="fa-solid fa-sliders"></i> Bot Control</a>
-          <a href="#"><i class="fa-solid fa-shield-halved"></i> Moderation</a>
+          <a
+            href="#"
+            class="nav-link"
+            data-tab="commands"
+            ><i class="fa-solid fa-terminal"></i> Bot Commands</a
+          >
+          <a
+            href="#"
+            class="nav-link"
+            data-tab="settings"
+            ><i class="fa-solid fa-sliders"></i> Logs & Settings</a
+          >
+          <a
+            href="#"
+            class="nav-link"
+            data-tab="logs"
+            ><i class="fa-solid fa-receipt"></i> Console Logs</a
+          >
         </nav>
         <div
           class="user-profile"
@@ -43,29 +61,169 @@
         </div>
       </aside>
 
+      <!-- মেইন কন্টেন্ট এরিয়া -->
       <main class="main-content">
-        <header>
-          <h1>System Overview</h1>
-          <p id="welcomeMessage">
-            Welcome back! Manage your guild operations with precision.
-          </p>
-        </header>
+        <!-- OVERVIEW TAB -->
+        <section
+          id="overview"
+          class="tab-content active">
+          <header>
+            <h1>System Overview</h1>
+            <p id="welcomeMessage">
+              Welcome back! Manage your guild operations with precision.
+            </p>
+          </header>
+          <div class="stats-grid">
+            <div class="card">
+              <i class="fa-solid fa-server icon"></i>
+              <h3>Active Guilds</h3>
+              <h2 id="guildCount">--</h2>
+            </div>
+            <div class="card">
+              <i class="fa-solid fa-triangle-exclamation icon"></i>
+              <h3>Total Warnings</h3>
+              <h2 id="warningCount">--</h2>
+            </div>
+            <div class="card">
+              <i class="fa-solid fa-microchip icon"></i>
+              <h3>System Engine</h3>
+              <h2>Bun v1.3</h2>
+            </div>
+          </div>
+        </section>
 
-        <section class="stats-grid">
-          <div class="card">
-            <i class="fa-solid fa-server icon"></i>
-            <h3>Active Guilds</h3>
-            <h2 id="guildCount">--</h2>
+        <!-- COMMANDS TAB -->
+        <section
+          id="commands"
+          class="tab-content">
+          <header>
+            <h1>Bot Commands & Functions</h1>
+            <p>View and manage all active application slash commands.</p>
+          </header>
+          <div class="commands-list">
+            <div class="cmd-item">
+              <div>
+                <span class="cmd-badge">/setup</span>
+                <p>
+                  Initializes core server security configuration and database
+                  maps.
+                </p>
+              </div>
+              <label class="switch"
+                ><input
+                  type="checkbox"
+                  checked /><span class="slider"></span
+              ></label>
+            </div>
+            <div class="cmd-item">
+              <div>
+                <span class="cmd-badge">/warn</span>
+                <p>
+                  Issues a formal warning to a member and logs penalty count.
+                </p>
+              </div>
+              <label class="switch"
+                ><input
+                  type="checkbox"
+                  checked /><span class="slider"></span
+              ></label>
+            </div>
+            <div class="cmd-item">
+              <div>
+                <span class="cmd-badge">/clear</span>
+                <p>
+                  Mass deletes a specified sequence of chat messages safely.
+                </p>
+              </div>
+              <label class="switch"
+                ><input
+                  type="checkbox"
+                  checked /><span class="slider"></span
+              ></label>
+            </div>
+            <div class="cmd-item">
+              <div>
+                <span class="cmd-badge">/ai-mod</span>
+                <p>Toggles deep-learning automated chat filtering features.</p>
+              </div>
+              <label class="switch"
+                ><input
+                  type="checkbox"
+                  id="aiModToggle" /><span class="slider"></span
+              ></label>
+            </div>
           </div>
-          <div class="card">
-            <i class="fa-solid fa-triangle-exclamation icon"></i>
-            <h3>Total Warnings</h3>
-            <h2 id="warningCount">--</h2>
+        </section>
+
+        <!-- SETTINGS TAB -->
+        <section
+          id="settings"
+          class="tab-content">
+          <header>
+            <h1>Logs Setup & Configuration</h1>
+            <p>Configure automated webhook and notification pipelines.</p>
+          </header>
+          <div class="glass-form-container">
+            <form id="settingsForm">
+              <div class="form-group">
+                <label
+                  ><i class="fa-solid fa-hashtag"></i> Moderation Log Channel
+                  ID</label
+                >
+                <input
+                  type="text"
+                  id="logChannelId"
+                  placeholder="e.g. 112233445566778899" />
+              </div>
+              <div class="form-group">
+                <label
+                  ><i class="fa-solid fa-bell"></i> Target Alert Role
+                  Name</label
+                >
+                <input
+                  type="text"
+                  id="alertRoleName"
+                  placeholder="e.g. REGIX Admin" />
+              </div>
+              <button
+                type="submit"
+                class="save-btn">
+                <i class="fa-solid fa-floppy-disk"></i> Save Configuration
+              </button>
+            </form>
           </div>
-          <div class="card">
-            <i class="fa-solid fa-microchip icon"></i>
-            <h3>System Engine</h3>
-            <h2>Bun v1.3</h2>
+        </section>
+
+        <!-- CONSOLE LOGS TAB -->
+        <section
+          id="logs"
+          class="tab-content">
+          <header>
+            <h1>Live Console Logs</h1>
+            <p>Real-time telemetry streaming from your local server engine.</p>
+          </header>
+          <div class="terminal-container">
+            <div class="terminal-header">
+              <div class="term-dots">
+                <span></span><span></span><span></span>
+              </div>
+              <span class="term-title">regix-bot@casaos:~</span>
+              <button
+                onclick="clearConsole()"
+                class="clear-term-btn">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div
+              class="terminal-body"
+              id="consoleOutput">
+              <div class="log-line system">
+                [SYSTEM] Connecting telemetry stream to Bun engine...
+              </div>
+              <div class="log-line success">
+                [SUCCESS] Internal websocket attached successfully.
+              </div>
+            </div>
           </div>
         </section>
       </main>
