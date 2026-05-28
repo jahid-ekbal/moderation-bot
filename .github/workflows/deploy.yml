@@ -3,24 +3,31 @@ name: Deploy REGIX Bot to Local Ubuntu Server
 on:
   push:
     branches:
-      - main
+      - main # কোড মেইন ব্রাঞ্চে পুশ হলেই পাইপলাইন রান হবে
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: self-hosted # এটি গিটহাব ক্লাউডের বদলে আপনার লোকাল রানারকে ট্রিগার করবে
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Build and Restart Bot Locally
+      - name: Pull Latest Code and Restart Bot
         run: |
+          # ১. উবুন্টুর এনভায়রনমেন্ট পাথ লোড করা
           source $HOME/.bashrc
           export BUN_INSTALL="$HOME/.bun"
           export PATH="$BUN_INSTALL/bin:$PATH"
 
+          # ২. আপনার মূল প্রজেক্ট ফোল্ডারে প্রবেশ করা
+          cd $HOME/moderation-bot || exit 1
+
+          # ৩. গিট মার্জ কনফ্লিক্ট এড়াতে লেটেস্ট কোড ফোর্স পুল করা
+          git fetch origin main
+          git reset --hard origin/main
+
+          # ৪. ডিপেন্ডেন্সি ইনস্টল ও প্রিজমা ডাটাবেস আপডেট
           bun install
           bunx prisma db push
           bunx prisma generate
 
+          # ৫. PM2 দিয়ে ডাউনটাইম ছাড়া বট রিস্টার্ট করা
           pm2 restart regix-bot --update-env || pm2 start bun --name "regix-bot" -- src/bot.ts
