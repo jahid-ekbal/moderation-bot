@@ -19,11 +19,13 @@ import {
 import * as dotenv from "dotenv";
 import fs from "fs";
 import { checkToxicity } from "./services/geminiService";
-import { db } from "./utils/db"; // প্রিজমা ডাটাবেস ক্লায়েন্ট ইমপোর্ট
+import { db } from "./utils/db"; // প্রিজমা ডাটাবেস ক্লায়েন্ট
 
 dotenv.config();
 
 const PREFIX = "!";
+// .env থেকে অনুমোদিত গ্লোবাল ইউজারদের লিস্ট অ্যারে আকারে নেওয়া
+const ALLOWED_USERS = process.env.ALLOWED_USERS?.split(",") || [];
 
 const client = new Client({
   intents: [
@@ -34,7 +36,7 @@ const client = new Client({
   ],
 });
 
-// লোকাল ব্যাড-ওয়ার্ড ফাইল লোড করার সেফ মেথড (ডাটাবেসের চাপ কমাতে)
+// লোকাল ব্যাড-ওয়ার্ড ফাইল লোড করার মেথড
 const loadBadWords = (): string[] => {
   try {
     if (fs.existsSync("./data/badWords.json")) {
@@ -49,11 +51,17 @@ const loadBadWords = (): string[] => {
 
 const badWords = loadBadWords();
 
-// --- ১. স্ল্যাশ কমান্ড রেজিস্ট্রেশন ---
+// --- ১. স্ল্যাশ কমান্ড রেজিস্ট্রেশন (অ্যারে) ---
 const commands = [
   new SlashCommandBuilder()
     .setName("help")
     .setDescription("REGIX বটের সব কমান্ডের তালিকা দেখুন"),
+
+  new SlashCommandBuilder()
+    .setName("restore")
+    .setDescription(
+      "চ্যানেলে ডিলিট হওয়া সর্বশেষ মেসেজটি রিস্টোর বা পুনরুদ্ধার করুন",
+    ),
 
   new SlashCommandBuilder()
     .setName("setup")
@@ -69,8 +77,7 @@ const commands = [
         .setName("welcome")
         .setDescription("স্বাগতম জানানোর চ্যানেল")
         .setRequired(false),
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 
   new SlashCommandBuilder()
     .setName("ticket-setup")
@@ -87,8 +94,7 @@ const commands = [
         .setDescription("টিকেট ক্যাটাগরি")
         .setRequired(true)
         .addChannelTypes(ChannelType.GuildCategory),
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 
   new SlashCommandBuilder()
     .setName("nukeuser")
@@ -100,8 +106,7 @@ const commands = [
         .setName("target")
         .setDescription("যে ইউজারের সব মেসেজ ডিলিট করতে চান")
         .setRequired(true),
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 ].map((cmd) => cmd.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN as string);
@@ -112,7 +117,9 @@ client.once("ready", async () => {
       await rest.put(Routes.applicationCommands(client.user.id), {
         body: commands,
       });
-      console.log(`✅ ${client.user.tag} প্রিজমা ডাটাবেস মোডে রেডি আছে!`);
+      console.log(
+        `✅ ${client.user.tag} প্রিজমা ও কঠোর সিকিউরিটি মোডে রেডি আছে!`,
+      );
     }
   } catch (error) {
     console.error(error);
@@ -127,7 +134,7 @@ async function nukeAllUserMessages(
 ) {
   try {
     await outputChannel.send(
-      `🧹 <@${targetUserId}> এর অল-টাইম মেসেজ খোঁজা এবং সমস্ত চ্যাট থেকে ডিলিট করার প্রক্রিয়া শুরু হচ্ছে...`,
+      `🧹 <@${targetUserId}> এর অল-টাইম মেসেজ খোঁজা এবং সমস্ত চ্যাট থেকে ডিলিট করার প্রক্রিয়া শুরু হচ্ছে...`,
     );
 
     const channels = await guild.channels.fetch();
@@ -169,7 +176,7 @@ async function nukeAllUserMessages(
       }
     }
     await outputChannel.send(
-      `✅ সফলভাবে সম্পন্ন হয়েছে! <@${targetUserId}> এর মোট **${totalDeleted}** টি মেসেজ সমস্ত চ্যাট থেকে মুছে ফেলা হয়েছে।`,
+      `✅ সফলভাবে সম্পন্ন হয়েছে! <@${targetUserId}> এর মোট **${totalDeleted}** টি মেসেজ সমস্ত চ্যাট থেকে মুছে ফেলা হয়েছে।`,
     );
   } catch (error) {
     console.error("Nuke Function Error:", error);
@@ -179,33 +186,94 @@ async function nukeAllUserMessages(
 // --- ৩. হেল্প কমান্ড রেসপন্স ম্যানেজার ---
 async function handleHelpCommand(channel: TextChannel) {
   const helpEmbed = new EmbedBuilder()
-    .setColor("#0099ff")
+    .setColor("#00f2fe")
     .setTitle("🛡️ REGIX মাল্টি-ফাংশনাল ডাটাবেস হাইব্রিড গাইড")
     .setDescription(
-      `স্ল্যাশ (\`/\`) অথবা প্রিফিক্স (\`${PREFIX}\`) উভয়ভাবেই কমান্ড রান করা যাবে।\n\n**কমান্ডসমূহ:**\n🔹 \`help\` - বটের গাইডলাইন\n🔹 \`setup\` - লগ ও ওয়েলকাম চ্যানেল সেটআপ\n🔹 \`ticket-setup\` - সাপোর্ট টিকেট প্যানেল\n🔹 \`nukeuser <@user>\` - ইউজারের অল-টাইম সব মেসেজ ডিলিট`,
+      `স্ল্যাশ (\`/\`) অথবা প্রিফিক্স (\`${PREFIX}\`) উভয়ভাবেই কমান্ড রান করা যাবে।\n\n**কমান্ডসমূহ:**\n🔹 \`help\` - বটের গাইডলাইন\n🔹 \`restore\` - ডিলিট হওয়া লাস্ট মেসেজ রিস্টোর\n🔹 \`setup\` - লগ ও ওয়েলকাম চ্যানেল সেটআপ\n🔹 \`ticket-setup\` - সাপোর্ট টিকেট প্যানেল\n🔹 \`nukeuser <@user>\` - ইউজারের অল-টাইম সব মেসেজ ডিলিট`,
     );
 
   await channel.send({ embeds: [helpEmbed] });
 }
 
-// --- ৪. স্ল্যাশ কমান্ড ও বাটন ইন্টারঅ্যাকশন হ্যান্ডলার ---
+// --- ৪. স্ল্যাশ কমান্ড ও বাটন ইন্টারঅ্যাকশন হ্যান্ডলার (Merged & Protected) ---
 client.on("interactionCreate", async (interaction: Interaction) => {
+  // 💻 ক) স্ল্যাশ কমান্ড হ্যান্ডলিং এবং এক্সেস গেট
   if (interaction.isChatInputCommand()) {
     const { commandName, guildId, guild, channel } = interaction;
     if (!guildId || !guild || !channel || !channel.isTextBased()) return;
     const txtChannel = channel as TextChannel;
 
+    const userId = interaction.user.id;
+    const isServerOwner = guild.ownerId === userId;
+    const isWhitelistedUser = ALLOWED_USERS.includes(userId);
+
+    // 🚨 কঠোর সিকিউরিটি গেট: অনার বা নির্দিষ্ট ইউজার না হলে কমান্ড ব্লক
+    if (!isServerOwner && !isWhitelistedUser) {
+      return interaction.reply({
+        content:
+          "❌ **Access Denied:** You are not authorized to use REGIX AI actions. This bot is strictly reserved for Server Owners and authorized specific users.",
+        ephemeral: true,
+      });
+    }
+
+    // help কমান্ড
     if (commandName === "help") {
       await interaction.deferReply({ ephemeral: true });
       await handleHelpCommand(txtChannel);
-      await interaction.editReply("✅ হেল্প মেনু পাঠানো হয়েছে।");
+      await interaction.editReply("✅ হেল্প মেনু পাঠানো হয়েছে।");
     }
 
+    // restore কমান্ড
+    if (commandName === "restore") {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const lastDeleted = await db.deletedMessage.findFirst({
+          where: { channelId: interaction.channelId },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (!lastDeleted) {
+          return interaction.editReply(
+            "No recently deleted messages found in this channel.",
+          );
+        }
+
+        const embed = new EmbedBuilder()
+          .setTitle("🔄 Restored Deleted Message")
+          .setDescription(lastDeleted.content)
+          .setColor("#00f2fe")
+          .addFields(
+            {
+              name: "Sent By",
+              value: `<@${lastDeleted.authorId}> (${lastDeleted.authorTag})`,
+              inline: true,
+            },
+            {
+              name: "Channel",
+              value: `<#${lastDeleted.channelId}>`,
+              inline: true,
+            },
+          )
+          .setTimestamp(lastDeleted.createdAt);
+
+        await txtChannel.send({ embeds: [embed] });
+        await db.deletedMessage.delete({ where: { id: lastDeleted.id } });
+        await interaction.editReply(
+          "Successfully restored the last deleted message.",
+        );
+      } catch (error) {
+        console.error(error);
+        await interaction.editReply(
+          "An error occurred while restoring the message.",
+        );
+      }
+    }
+
+    // setup কমান্ড
     if (commandName === "setup") {
       const logChan = interaction.options.getChannel("log");
       const welChan = interaction.options.getChannel("welcome");
 
-      // ডাটাবেস অ্যাকশন: Upsert কনফিগারেশন
       await db.guildConfig.upsert({
         where: { guildId },
         update: {
@@ -220,22 +288,23 @@ client.on("interactionCreate", async (interaction: Interaction) => {
       });
 
       await interaction.reply(
-        "✅ ডাটাবেসে কনফিগারেশন সফলভাবে আপডেট করা হয়েছে!",
+        "✅ ডাটাবেসে কনফিগারেশন সফলভাবে আপডেট করা হয়েছে!",
       );
     }
 
+    // ticket-setup কমান্ড
     if (commandName === "ticket-setup") {
       const targetChannel = interaction.options.getChannel(
         "channel",
       ) as TextChannel;
       const category = interaction.options.getChannel("category");
-      if (!category)
+      if (!category) {
         return interaction.reply({
           content: "❌ একটি বৈধ ক্যাটাগরি সিলেক্ট করুন",
           ephemeral: true,
         });
+      }
 
-      // ডাটাবেস অ্যাকশন: টিকেট ক্যাটাগরি সংরক্ষণ
       await db.guildConfig.upsert({
         where: { guildId },
         update: { ticketCategory: category.id },
@@ -259,14 +328,15 @@ client.on("interactionCreate", async (interaction: Interaction) => {
 
       await targetChannel.send({ embeds: [embed], components: [row] });
       await interaction.reply({
-        content: "✅ টিকেট প্যানেল ডাটাবেস ট্র্যাকিং সহ তৈরি হয়েছে!",
+        content: "✅ টিকেট প্যানেল ডাটাবেস ট্র্যাকিং সহ তৈরি হয়েছে!",
         ephemeral: true,
       });
     }
 
+    // nukeuser কমান্ড
     if (commandName === "nukeuser") {
       const targetUser = interaction.options.getUser("target");
-      if (!targetUser) return interaction.reply("❌ ইউজার পাওয়া যায়নি।");
+      if (!targetUser) return interaction.reply("❌ ইউজার পাওয়া যায়নি।");
       await interaction.reply({
         content:
           "⏳ অল-টাইম মেসেজ ডিলিট করার অ্যাকশন ব্যাকগ্রাউন্ডে প্রসেস করা হচ্ছে...",
@@ -276,13 +346,12 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     }
   }
 
-  // 📩 টিকেট বাটন ইন্টারঅ্যাকশন
+  // 📩 খ) টিকেট বাটন ইন্টারঅ্যাকশন (সদস্যদের জন্য উম্মুক্ত রাখতে গেটের বাইরে রাখা হয়েছে)
   if (interaction.isButton() && interaction.customId === "create_ticket") {
     const { guild, user } = interaction;
     if (!guild) return;
     await interaction.deferReply({ ephemeral: true });
 
-    // ডাটাবেস থেকে ক্যাটাগরি আইডি রিড করা
     const guildConfig = await db.guildConfig.findUnique({
       where: { guildId: guild.id },
     });
@@ -311,7 +380,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
 
     const ticketEmbed = new EmbedBuilder()
       .setColor("#00ffcc")
-      .setTitle("🎟️ সাপোর্ট টিকেট ওপেন হয়েছে")
+      .setTitle("🎟️ সাপোর্ট টিকেট ওপেন হয়েছে")
       .setDescription(
         `হ্যালো <@${user.id}>, আমাদের সাপোর্ট টিমে আপনাকে স্বাগতম। আপনার সমস্যাটি এখানে বিস্তারিত লিখুন।`,
       )
@@ -322,29 +391,42 @@ client.on("interactionCreate", async (interaction: Interaction) => {
       embeds: [ticketEmbed],
     });
     await interaction.editReply({
-      content: `✅ আপনার টিকেট চ্যানেল তৈরি হয়েছে: ${ticketChannel}`,
+      content: `✅ আপনার টিকেট চ্যানেল তৈরি হয়েছে: ${ticketChannel}`,
     });
   }
 });
 
-// --- ৫. মেসেজ ইভেন্ট (Prefix, AI Filter, DB Warning System & Spam Protection) ---
+// --- ৫. মেসেজ ইভেন্ট (Prefix, AI Filter, DB Warning System & Authorizations) ---
 client.on("messageCreate", async (message: Message) => {
   if (message.author.bot || !message.guild) return;
 
   const channel = message.channel as TextChannel;
   const guildId = message.guild.id;
 
-  // 🛡️ স্প্যাম প্রটেকশন লেয়ার
+  // 🛡️ স্প্যাম প্রটেকশন লেয়ার
   if (message.attachments.size >= 4) {
     await message.delete().catch(() => {});
     await channel.send(
-      `⚠️ <@${message.author.id}>, একসাথে অতিরিক্ত ফাইল আপলোড করা স্প্যামিংয়ের আওতাভুক্ত। অনুগ্রহ করে বিরত থাকুন।`,
+      `⚠️ <@${message.author.id}>, একসাথে অতিরিক্ত ফাইল আপলোড করা স্প্যামিংয়ের আওতাভুক্ত। অনুগ্রহ করে বিরত থাকুন।`,
     );
     return;
   }
 
   // প্রিফিক্স কমান্ড হ্যান্ডলিং
   if (message.content.startsWith(PREFIX)) {
+    const userId = message.author.id;
+    const isServerOwner = message.guild.ownerId === userId;
+    const isWhitelistedUser = ALLOWED_USERS.includes(userId);
+
+    // 🚨 প্রিফিক্স কমান্ড সিকিউরিটি চেক
+    if (!isServerOwner && !isWhitelistedUser) {
+      return message
+        .reply(
+          "❌ **Access Denied:** You are not authorized to use REGIX AI actions.",
+        )
+        .catch(() => {});
+    }
+
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift()?.toLowerCase();
 
@@ -354,12 +436,6 @@ client.on("messageCreate", async (message: Message) => {
     }
 
     if (command === "nukeuser") {
-      if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
-        await message.reply(
-          "❌ এই কমান্ডটি ব্যবহার করার জন্য আপনার Admin পারমিশন নেই।",
-        );
-        return;
-      }
       const targetMember = message.mentions.members?.first();
       if (!targetMember) {
         await message.reply(
@@ -372,7 +448,7 @@ client.on("messageCreate", async (message: Message) => {
     }
   }
 
-  // 🤖 Gemini AI টক্সিসিটি ও ব্যাড-ওয়ার্ড ফিল্টার
+  // 🤖 Gemini AI টক্সিসিটি ও ব্যাড-ওয়ার্ড ফিল্টার
   const cleanText = message.content
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, "")
@@ -389,7 +465,6 @@ client.on("messageCreate", async (message: Message) => {
   await message.delete().catch(() => {});
   const userId = message.author.id;
 
-  // ডাটাবেস অ্যাকশন: ইউজারের ওয়ার্নিং সংখ্যা ১ বৃদ্ধি বা নতুন এন্ট্রি তৈরি করা
   const userWarning = await db.userWarning.upsert({
     where: { userId_guildId: { userId, guildId } },
     update: { count: { increment: 1 } },
@@ -397,8 +472,6 @@ client.on("messageCreate", async (message: Message) => {
   });
 
   const currentWarnings = userWarning.count;
-
-  // ডাটাবেস থেকে মডারেশন লগ চ্যানেল খুঁজে বের করা
   const guildConfig = await db.guildConfig.findUnique({ where: { guildId } });
 
   if (guildConfig?.logChannel) {
@@ -428,36 +501,59 @@ client.on("messageCreate", async (message: Message) => {
     if (currentWarnings === 4) {
       await message.member?.timeout(
         3600000,
-        "টক্সিক ভাষা ব্যবহারের চূড়ান্ত সতর্কবার্তা।",
+        "টক্সিক ভাষা ব্যবহারের চূড়ান্ত সতর্কবার্তা।",
       );
-      await message.author.send(
-        `⚠️ **REGIX মডারেশন:** আপনাকে ১ ঘণ্টার জন্য মিউট করা হয়েছে। এটি আপনার **৪/৫** নম্বর সতর্কতা।`,
-      );
+      await message.author
+        .send(
+          `⚠️ **REGIX মডারেশন:** আপনাকে ১ ঘণ্টার জন্য মিউট করা হয়েছে। এটি আপনার **৪/৫** নম্বর সতর্কতা।`,
+        )
+        .catch(() => {});
     } else if (currentWarnings >= 5) {
       await message.member?.ban({
         reason: "বারবার সতর্ক করার পরেও অশালীন ভাষা ব্যবহার করা।",
       });
-      await message.author.send(
-        "🚫 **REGIX মডারেশন:** নিয়ম ভঙ্গ করে ৫ বার গালি দেওয়ার কারণে আপনাকে সার্ভার থেকে স্থায়ীভাবে **Ban** করা হয়েছে।",
-      );
+      await message.author
+        .send(
+          "🚫 **REGIX মডারেশন:** নিয়ম ভঙ্গ করে ৫ বার গালি দেওয়ার কারণে আপনাকে সার্ভার থেকে স্থায়ীভাবে **Ban** করা হয়েছে Bound.",
+        )
+        .catch(() => {});
 
-      // ডাটাবেস অ্যাকশন: ব্যান হওয়ার পর এই সার্ভার থেকে ইউজারের ওয়ার্নিং ডাটা রিসেট
       await db.userWarning
         .delete({ where: { userId_guildId: { userId, guildId } } })
         .catch(() => {});
     } else {
-      await message.author.send(
-        `⚠️ **REGIX মডারেশন:** সার্ভারে অশালীন ভাষা ব্যবহার করা নিষেধ। আপনার সতর্কতা কাউন্ট: **${currentWarnings}/5**।`,
-      );
+      await message.author
+        .send(
+          `⚠️ **REGIX মডারেশন:** সার্ভারে অশালীন ভাষা ব্যবহার করা নিষেধ। আপনার সতর্কতা কাউন্ট: **${currentWarnings}/5**।`,
+        )
+        .catch(() => {});
     }
   } catch (err) {
     console.error("Error executing moderation action:", err);
   }
 });
 
-// --- ৬. মেম্বার জয়েনিং ইভেন্ট ---
+// --- ৬. মেসেজ ডিলিট ট্র্যাকিং ইভেন্ট (ডাটাবেস লগার) ---
+client.on("messageDelete", async (message) => {
+  if (message.partial || message.author?.bot || !message.content) return;
+
+  try {
+    await db.deletedMessage.create({
+      data: {
+        content: message.content,
+        authorId: message.author.id,
+        authorTag: message.author.tag,
+        channelId: message.channel.id,
+        guildId: message.guildId || "",
+      },
+    });
+  } catch (error) {
+    console.error("Error saving deleted message:", error);
+  }
+});
+
+// --- ৭. মেম্বার জয়েনিং ইভেন্ট ---
 client.on("guildMemberAdd", async (member: GuildMember) => {
-  // ডাটাবেস থেকে স্বাগতম চ্যানেল আইডি রিড করা
   const guildConfig = await db.guildConfig.findUnique({
     where: { guildId: member.guild.id },
   });

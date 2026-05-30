@@ -1,6 +1,6 @@
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL") // v6 এ এটি সম্পূর্ণ সাপোর্ট করে এবং একদম স্ট্যাবল
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -15,7 +15,7 @@ model GuildConfig {
   ticketCategory String?
 }
 
-// ইউজার ওয়ার্নিং টেবিল
+// ইউজার ওয়ার্নিং টেবিল
 model UserWarning {
   id      String @id @default(cuid())
   userId  String
@@ -23,4 +23,15 @@ model UserWarning {
   count   Int    @default(0)
 
   @@unique([userId, guildId])
+}
+
+// ডিলিট হওয়া মেসেজ রিস্টোর টেবিল
+model DeletedMessage {
+  id        String   @id @default(cuid())
+  content   String
+  authorId  String
+  authorTag String
+  channelId String
+  guildId   String
+  createdAt DateTime @default(now())
 }
